@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "479779284605",
+    "firebase_url": "https://argon-potential-271418.firebaseio.com",
+    "project_id": "argon-potential-271418",
+    "storage_bucket": "argon-potential-271418.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:479779284605:android:5dde9a09dd57e2b7e93314",
+        "android_client_info": {
+          "package_name": "com.test.sitcircular"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "479779284605-bevc772rvbn05crvj47nsfbiudbkp5pj.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCDkSi6VXq7jAx17jD9rSVn7kn1lK4vrcM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "479779284605-bevc772rvbn05crvj47nsfbiudbkp5pj.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

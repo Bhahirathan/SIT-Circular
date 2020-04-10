@@ -13,7 +13,7 @@
         android:label="SIT Circular"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
-        <activity android:name=".List" />
+        <activity android:name=".List"/>
         <activity android:name=".Admin"/>
         <activity android:name=".Sign" />
         <activity android:name=".MainActivity">

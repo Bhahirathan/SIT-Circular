@@ -1,5 +1,6 @@
 package com.test.sitcircular;
 
+import android.annotation.SuppressLint;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -12,7 +13,10 @@ import android.os.Environment;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.StrictMode;
+import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.MimeTypeMap;
@@ -23,10 +27,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.appcompat.widget.PopupMenu;
 
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.google.firebase.storage.FileDownloadTask;
+import com.google.firebase.storage.ListResult;
 import com.google.firebase.storage.OnProgressListener;
 import com.google.firebase.storage.StorageReference;
 import com.test.sitcircular.util.Helper;
@@ -104,6 +110,32 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
         return false;
     }
 
+    public void del(StorageReference storageReference)
+    {
+        storageReference.listAll().addOnSuccessListener(new OnSuccessListener<ListResult>() {
+            @Override
+            public void onSuccess(ListResult listResult) {
+                for (StorageReference item : listResult.getPrefixes()) {
+                    del(item);
+                }
+                for (StorageReference item : listResult.getItems()) {
+                    item.delete().addOnSuccessListener(new OnSuccessListener<Void>() {
+                        @Override
+                        public void onSuccess(Void aVoid) {
+
+                        }
+                    }).addOnFailureListener(new OnFailureListener() {
+                        @Override
+                        public void onFailure(@NonNull Exception e) {
+
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    @SuppressLint("InflateParams")
     @Override
     public View getView(final int position,View convertView, final ViewGroup parent) {
         final SubjectData subjectData=arrayList.get(position);
@@ -111,14 +143,43 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
       if(convertView==null){
           LayoutInflater layoutInflater = LayoutInflater.from(context);
           convertView=layoutInflater.inflate(R.layout.list_row, null);
+          final View finalConvertView = convertView;
           convertView.setOnLongClickListener(new View.OnLongClickListener() {
               @Override
               public boolean onLongClick(View v) {
-                  Toast.makeText(context,"Long Press",Toast.LENGTH_SHORT).show();
+                  PopupMenu popupMenu=new PopupMenu(context,finalConvertView, Gravity.RIGHT);
+                  MenuInflater menuInflater=popupMenu.getMenuInflater();
+                  menuInflater.inflate(R.menu.edit_pop,popupMenu.getMenu());
+                  popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
+                      @Override
+                      public boolean onMenuItemClick(MenuItem item) {
+                          if(item.getTitle().equals("Delete"))
+                          {
+                              final SubjectData subjectData=arrayList.get(position);
+                              if(subjectData.Image.equals("")) {
+                                  subjectData.Link.child(subjectData.SubjectName).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
+                                      @Override
+                                      public void onSuccess(Void aVoid) {
+                                          //Toast.makeText(context, "Delete Successfully", Toast.LENGTH_SHORT).show();
+                                      }
+                                  }).addOnFailureListener(new OnFailureListener() {
+                                      @Override
+                                      public void onFailure(@NonNull Exception e) {
+                                          Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show();
+                                      }
+                                  });
+                              }
+                              else {
+                                  del(subjectData.Link.child(subjectData.SubjectName));
+                              }
+                          }
+                          return false;
+                      }
+                  });
+                  popupMenu.show();
                   return false;
               }
           });
-          final View finalConvertView = convertView;
           convertView.setOnClickListener(new View.OnClickListener() {
               @Override
               public void onClick(View v) {
@@ -166,6 +227,7 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
                                       @Override
                                       public void onFailure(@NonNull Exception exception) {
                                           Helper.dismissProgressDialog();
+                                          Toast.makeText(context,"Failed",Toast.LENGTH_SHORT).show();
                                       }
                                   }).addOnProgressListener(new OnProgressListener<FileDownloadTask.TaskSnapshot>() {
                                       @Override

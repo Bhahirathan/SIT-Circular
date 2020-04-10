@@ -58,7 +58,7 @@ public class Admin extends AppCompatActivity {
                         boolean flag=false;
                         for (DataSnapshot d:dataSnapshot.getChildren())
                         {
-                            String val=d.getValue(String.class);
+                            String val= d.getValue().toString();
                             if(val.equals(Email))
                             {
                                 if(TextUtils.isEmpty(Email)){
