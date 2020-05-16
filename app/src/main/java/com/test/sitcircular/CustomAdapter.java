@@ -1,7 +1,6 @@
 package com.test.sitcircular;
 
 import android.annotation.SuppressLint;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -10,6 +9,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.StrictMode;
@@ -41,20 +41,15 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 
-//import com.squareup.picasso.Picasso;
-
 public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelable {
     private ArrayList<SubjectData> arrayList;
-    private ArrayList<String> children;
     private Context context;
     public StorageReference temp;
     private String name;
-    public CustomAdapter(Context context, ArrayList<SubjectData> arrayList, ArrayList<String> children) {
+    CustomAdapter(Context context, ArrayList<SubjectData> arrayList) {
         this.arrayList=arrayList;
         this.context=context;
-        this.children=children;
     }
-
     protected CustomAdapter(Parcel in) {
     }
 
@@ -110,13 +105,13 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
         return false;
     }
 
-    public void del(StorageReference storageReference)
+    private void del(final StorageReference storageReference, final StorageReference st)
     {
         storageReference.listAll().addOnSuccessListener(new OnSuccessListener<ListResult>() {
             @Override
             public void onSuccess(ListResult listResult) {
                 for (StorageReference item : listResult.getPrefixes()) {
-                    del(item);
+                    del(item,st);
                 }
                 for (StorageReference item : listResult.getItems()) {
                     item.delete().addOnSuccessListener(new OnSuccessListener<Void>() {
@@ -130,6 +125,26 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
 
                         }
                     });
+                }
+
+                if(st.getName().equals(storageReference.getName())) {
+                    new Handler().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            Intent intent = new Intent(context, List.class);
+                            if(storageReference.getParent().getPath().equals(""))
+                                intent.putExtra("path","/");
+                                else
+                            intent.putExtra("path",storageReference.getParent().getPath());
+                            try {
+                                intent.putExtra("p", storageReference.getParent().getParent().getPath());
+                            } catch (NullPointerException e) {
+                                intent.putExtra("p","/");
+                            }
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            context.startActivity(intent);
+                        }
+                    }, 1000);
                 }
             }
         });
@@ -147,7 +162,7 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
           convertView.setOnLongClickListener(new View.OnLongClickListener() {
               @Override
               public boolean onLongClick(View v) {
-                  PopupMenu popupMenu=new PopupMenu(context,finalConvertView, Gravity.RIGHT);
+                  @SuppressLint("RtlHardcoded") PopupMenu popupMenu=new PopupMenu(context,finalConvertView, Gravity.RIGHT);
                   MenuInflater menuInflater=popupMenu.getMenuInflater();
                   menuInflater.inflate(R.menu.edit_pop,popupMenu.getMenu());
                   popupMenu.setOnMenuItemClickListener(new PopupMenu.OnMenuItemClickListener() {
@@ -160,7 +175,6 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
                                   subjectData.Link.child(subjectData.SubjectName).delete().addOnSuccessListener(new OnSuccessListener<Void>() {
                                       @Override
                                       public void onSuccess(Void aVoid) {
-                                          //Toast.makeText(context, "Delete Successfully", Toast.LENGTH_SHORT).show();
                                       }
                                   }).addOnFailureListener(new OnFailureListener() {
                                       @Override
@@ -168,10 +182,20 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
                                           Toast.makeText(context, e.toString(), Toast.LENGTH_SHORT).show();
                                       }
                                   });
+                                  Intent intent = new Intent(context, List.class);
+                                  intent.putExtra("path",subjectData.Link.getPath());
+                                  try {
+                                      intent.putExtra("p",subjectData.Link.getParent().getPath());
+                                  } catch (Exception e) {
+                                      intent.putExtra("p", "/");
+                                  }
+                                  intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                  context.startActivity(intent);
                               }
                               else {
-                                  del(subjectData.Link.child(subjectData.SubjectName));
+                                  del(subjectData.Link.child(subjectData.SubjectName),subjectData.Link.child(subjectData.SubjectName));
                               }
+
                           }
                           return false;
                       }
@@ -205,7 +229,6 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
                                   } catch (IOException e) {
                                       e.printStackTrace();
                                   }
-
                                   final FileDownloadTask fileDownloadTask = temp.getFile(file);
                                   Helper.initProgressDialog(context);
                                   Helper.mProgressDialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel", new DialogInterface.OnClickListener() {
@@ -245,12 +268,9 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
                       });
                   }
                   else {
-                      children.add(subjectData.SubjectName);
                       Intent intent = new Intent(context, List.class);
-                      Bundle b=new Bundle();
-                      b.putParcelable("link", subjectData);
-                      b.putSerializable("ch",children);
-                      intent.putExtra("b",b);
+                      intent.putExtra("path",subjectData.Link.getPath()+"/"+subjectData.SubjectName);
+                      intent.putExtra("p",subjectData.Link.getPath());
                       intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                       context.startActivity(intent);
                   }
@@ -274,7 +294,7 @@ public class CustomAdapter extends BaseAdapter implements ListAdapter, Parcelabl
       }
         return convertView;
     }
-    public void open(File f,String name)
+    private void open(File f, String name)
     {
         Intent i = new Intent(Intent.ACTION_VIEW);
         Uri u = Uri.fromFile(f);

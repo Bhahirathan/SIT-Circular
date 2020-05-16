@@ -1,7 +1,6 @@
 package com.test.sitcircular;
 
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
@@ -9,23 +8,32 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.OpenableColumns;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.Window;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.ProgressBar;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SearchView;
+import androidx.biometric.BiometricPrompt;
+import androidx.core.hardware.fingerprint.FingerprintManagerCompat;
+import androidx.fragment.app.FragmentActivity;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import com.google.android.gms.tasks.OnCompleteListener;
@@ -40,6 +48,7 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.storage.FirebaseStorage;
 import com.google.firebase.storage.ListResult;
 import com.google.firebase.storage.OnPausedListener;
@@ -49,14 +58,16 @@ import com.google.firebase.storage.UploadTask;
 import com.test.sitcircular.util.Helper;
 
 import java.util.ArrayList;
+import java.util.Objects;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 public class List extends AppCompatActivity{
     private FirebaseStorage storage;
     private DatabaseReference databaseReference;
-    private StorageReference storageRef;
+    AlertDialog.Builder alert;
     private CustomAdapter customAdapter;
     private ArrayList<SubjectData> arrayList;
-    private ArrayList<String> children;
     private FloatingActionButton floatingActionButton, folder, file,add_file;
     private FirebaseAuth firebaseAuth=FirebaseAuth.getInstance();
     private ProgressDialog progressDialog;
@@ -65,13 +76,24 @@ public class List extends AppCompatActivity{
     private SwipeRefreshLayout swipeRefreshLayout;
     private ListView listView;
     private Bundle b;
-    @SuppressLint({"RestrictedApi", "ResourceAsColor"})
+    int f;
+    private StorageReference storageRef,stref;
+    private ProgressBar p;
+    private BiometricPrompt myBiometricPrompt;
+    private  BiometricPrompt.PromptInfo promptInfo;
+    private FingerprintManagerCompat fingerprintManagerCompat;
+
+    @SuppressLint({"RestrictedApi", "ResourceAsColor", "SetTextI18n"})
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        requestWindowFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
         setContentView(R.layout.activity_list);
-        children = new ArrayList<>();
+        setProgressBarIndeterminateVisibility(true);
         progressDialog = new ProgressDialog(this);
+        alert=new AlertDialog.Builder(this);
+        f=0;
+        p=findViewById(R.id.pbar);
         floatingActionButton = findViewById(R.id.fab);
         folder = findViewById(R.id.folder);
         file = findViewById(R.id.user);
@@ -81,14 +103,74 @@ public class List extends AppCompatActivity{
         add_file.setVisibility(View.GONE);
         file.setVisibility(View.GONE);
         folder.setVisibility(View.GONE);
+
+        Executor newExecutor = Executors.newSingleThreadExecutor();
+        FragmentActivity activity = this;
+        myBiometricPrompt = new BiometricPrompt(activity, newExecutor, new BiometricPrompt.AuthenticationCallback() {
+            @Override
+            public void onAuthenticationError(int errorCode, @NonNull CharSequence errString) {
+                super.onAuthenticationError(errorCode, errString);
+
+                                if (errorCode == BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                    moveTaskToBack(true);
+                } else {
+                    moveTaskToBack(true);
+                }
+            }
+
+            @Override
+            public void onAuthenticationSucceeded(@NonNull BiometricPrompt.AuthenticationResult result) {
+                super.onAuthenticationSucceeded(result);
+
+                //over here
+                li();
+            }
+            @Override
+            public void onAuthenticationFailed() {
+                super.onAuthenticationFailed();
+                myBiometricPrompt.authenticate(promptInfo);
+            }
+        });
+        promptInfo = new BiometricPrompt.PromptInfo.Builder()
+                .setTitle("App Locked")
+                .setSubtitle("Touch the fingerprint sensor")
+                .setNegativeButtonText("Cancel").setConfirmationRequired(true)
+                .build();
+        Intent i = getIntent();
+        b = i.getExtras();
+        fingerprintManagerCompat=FingerprintManagerCompat.from(getApplicationContext());
+        storage = FirebaseStorage.getInstance();
+        stref=storageRef = storage.getReference();
+        if (b != null) {
+            if(!Objects.requireNonNull(b.getString("p")).equals(""))
+                stref=storageRef.child(Objects.requireNonNull(b.getString("p")));
+            storageRef=storageRef.child(Objects.requireNonNull(b.getString("path")));
+            //Toast.makeText(getApplicationContext(),storageRef.getPath(),Toast.LENGTH_LONG).show();
+            li();
+        }
+        else
+        {
+            if(f==0) {
+                f=1;
+                if(fingerprintManagerCompat.hasEnrolledFingerprints()&&fingerprintManagerCompat.isHardwareDetected())
+                myBiometricPrompt.authenticate(promptInfo);
+                else
+                    li();
+            }
+        }
+        FirebaseMessaging.getInstance().subscribeToTopic("notifications");
+    }
+
+    @SuppressLint("ResourceAsColor")
+    void li()
+    {
         databaseReference= FirebaseDatabase.getInstance().getReference().child("Admins");
         ValueEventListener eventListener=new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 for (DataSnapshot d : dataSnapshot.getChildren()) {
                     String val = d.getValue(String.class);
-
-                    if (val.equals(FirebaseAuth.getInstance().getCurrentUser().getEmail())) {
+                    if (Objects.requireNonNull(val).equals(Objects.requireNonNull(FirebaseAuth.getInstance().getCurrentUser()).getEmail())) {
                         floatingActionButton.setVisibility(View.VISIBLE);
                         add_file.setVisibility(View.VISIBLE);
                         file.setVisibility(View.VISIBLE);
@@ -111,16 +193,9 @@ public class List extends AppCompatActivity{
                 swipeRefreshLayout.setRefreshing(false);
             }
         });
-        Intent i = getIntent();
-        b = i.getExtras();
-        storage = FirebaseStorage.getInstance();
-        storageRef = storage.getReference();
-        if (b != null) {
-            children = (ArrayList<String>) i.getBundleExtra("b").getSerializable("ch");
-            for (String ch : children)
-                storageRef = storageRef.child(ch);
-            //subjectData = i.getBundleExtra("b").getParcelable("link");
-        }
+
+        TextView textView=findViewById(R.id.path);
+        textView.setText("Home "+storageRef.getPath().replaceAll("/"," > "));
         file.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -131,6 +206,10 @@ public class List extends AppCompatActivity{
                 alert.setCancelable(true).setPositiveButton("OK", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
+                        progressDialog.setMessage("Please wait...");
+                        progressDialog.setCancelable(false);
+                        progressDialog.setCanceledOnTouchOutside(false);
+                        progressDialog.show();
                         RadioGroup Rg=myview.findViewById(R.id.type);
                         RadioButton rb=myview.findViewById(Rg.getCheckedRadioButtonId());
                         final EditText et=myview.findViewById(R.id.mail);
@@ -142,9 +221,12 @@ public class List extends AppCompatActivity{
                                     firebaseAuth.sendPasswordResetEmail(et.getText().toString()).addOnSuccessListener(new OnSuccessListener<Void>() {
                                         @Override
                                         public void onSuccess(Void aVoid) {
-                                            databaseReference= databaseReference.push();
-                                            databaseReference.setValue(et.getText().toString());
+                                            databaseReference.push().setValue(et.getText().toString());
+                                            progressDialog.hide();
                                             Toast.makeText(getApplicationContext(),et.getText()+ " added Successfully as an Admin",Toast.LENGTH_SHORT).show();
+                                            firebaseAuth.signOut();
+                                            Toast.makeText(getApplicationContext(),"Please Sign in again for verification",Toast.LENGTH_SHORT).show();
+                                            startActivity(new Intent(getApplicationContext(),List.class));
                                         }
                                     }).addOnFailureListener(new OnFailureListener() {
                                         @Override
@@ -163,8 +245,12 @@ public class List extends AppCompatActivity{
                                     firebaseAuth.sendPasswordResetEmail(et.getText().toString()).addOnSuccessListener(new OnSuccessListener<Void>() {
                                         @Override
                                         public void onSuccess(Void aVoid) {
-                                            databaseReference= databaseReference.push();FirebaseDatabase.getInstance().getReference().child("Faculties").push().setValue(et.getText().toString());
+                                            FirebaseDatabase.getInstance().getReference().child("Faculties").push().setValue(et.getText().toString());
+                                            progressDialog.hide();
                                             Toast.makeText(getApplicationContext(),et.getText()+ " added Successfully as a Faculty",Toast.LENGTH_SHORT).show();
+                                            firebaseAuth.signOut();
+                                            Toast.makeText(getApplicationContext(),"Please Sign in again for verification",Toast.LENGTH_SHORT).show();
+                                            startActivity(new Intent(getApplicationContext(),Admin.class));
                                         }
                                     }).addOnFailureListener(new OnFailureListener() {
                                         @Override
@@ -196,23 +282,23 @@ public class List extends AppCompatActivity{
                 Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
                 intent.setType("*/*");
                 intent=Intent.createChooser(intent,"Choose a file: ");
-                        startActivityForResult(intent, 1);
+                startActivityForResult(intent, 1);
             }
         });
         listView= findViewById(R.id.list);
         registerForContextMenu(listView);
-
         folder.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 LayoutInflater layoutInflater=LayoutInflater.from(List.this);
-                final View myview=layoutInflater.inflate(R.layout.prompt,null);
+                @SuppressLint("InflateParams") final View myview=layoutInflater.inflate(R.layout.prompt,null);
                 AlertDialog.Builder alert=new AlertDialog.Builder(List.this);
                 alert.setView(myview);
                 alert.setCancelable(true).setPositiveButton("OK", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         progressDialog.setMessage("Creating Folder...");
+                        progressDialog.setCancelable(false);
                         progressDialog.setCanceledOnTouchOutside(false);
                         progressDialog.show();
                         EditText ed=myview.findViewById(R.id.fold);
@@ -231,22 +317,23 @@ public class List extends AppCompatActivity{
                 alertDialog.show();
             }
         });
+        refresh();
     }
-
     @Override
     protected void onResume() {
         super.onResume();
-        refresh();
+        if(f!=0)
+            if(fingerprintManagerCompat.hasEnrolledFingerprints()&&fingerprintManagerCompat.isHardwareDetected())
+                myBiometricPrompt.authenticate(promptInfo);
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode == -1) {
-            String path = Helper.getPath(this, Uri.parse(data.getData().toString()));
             Uri uri=data.getData();
-            Cursor cursor=getContentResolver().query(uri,null,null,null,null);
-            int namind=cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+            @SuppressLint("Recycle") Cursor cursor=getContentResolver().query(Objects.requireNonNull(uri),null,null,null,null);
+            int namind= Objects.requireNonNull(cursor).getColumnIndex(OpenableColumns.DISPLAY_NAME);
             cursor.moveToFirst();
             switch (requestCode) {
                 case 1:
@@ -258,8 +345,8 @@ public class List extends AppCompatActivity{
     @Override
     public void onBackPressed()
     {
-        if(b==null)
-        new AlertDialog.Builder(this).setTitle("Exit?")
+        if(storageRef.getPath().equals("/")) {
+            alert.setTitle("Exit?")
                 .setMessage("Are you sure you want to exit?")
                 .setNegativeButton(android.R.string.no,null)
                 .setPositiveButton(android.R.string.yes, new DialogInterface.OnClickListener() {
@@ -267,28 +354,36 @@ public class List extends AppCompatActivity{
                     public void onClick(DialogInterface dialog, int which) {
                         finishAffinity();
                     }
-                }).create().show();
+                });
+            AlertDialog dialog=alert.create();
+            dialog.show();
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setBackgroundColor(Color.TRANSPARENT);
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(Color.parseColor("#004b8e"));
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(Color.parseColor("#004b8e"));
+            dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setBackgroundColor(Color.TRANSPARENT);
+        }
         else
         {
-            super.onBackPressed();
+            Intent intent = new Intent(getApplicationContext(), List.class);
+            Bundle b=new Bundle();
+            intent.putExtra("b",b);
+            intent.putExtra("path",stref.getPath());
+            if(stref.getParent()!=null)
+            intent.putExtra("p",stref.getParent().getPath());
+            else
+                intent.putExtra("p","/");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
         }
-        return;
     }
 
     private void uploadFromStream(String name, Intent inten) {
-//        Helper.showDialog(this);
-        mUploadTask = storageRef.child(name).putFile(inten.getData());
+        mUploadTask = storageRef.child(name).putFile(Objects.requireNonNull(inten.getData()));
         Helper.initProgressDialog(this);
         Helper.mProgressDialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel", new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialogInterface, int i) {
                 mUploadTask.cancel();
-            }
-        });
-        Helper.mProgressDialog.setButton(DialogInterface.BUTTON_NEUTRAL, "Pause", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialogInterface, int i) {
-                mUploadTask.pause();
             }
         });
         Helper.mProgressDialog.show();
@@ -305,14 +400,14 @@ public class List extends AppCompatActivity{
             }
         }).addOnProgressListener(new OnProgressListener<UploadTask.TaskSnapshot>() {
             @Override
-            public void onProgress(UploadTask.TaskSnapshot taskSnapshot) {
+            public void onProgress(@NonNull UploadTask.TaskSnapshot taskSnapshot) {
                 int progress = (int) ((100 * taskSnapshot.getBytesTransferred()) / taskSnapshot.getTotalByteCount());
                 Helper.setProgress(progress);
             }
         }).addOnPausedListener(new OnPausedListener<UploadTask.TaskSnapshot>() {
             @Override
-            public void onPaused(UploadTask.TaskSnapshot taskSnapshot) {
-                findViewById(R.id.button_upload_resume).setVisibility(View.VISIBLE);
+            public void onPaused(@NonNull UploadTask.TaskSnapshot taskSnapshot) {
+
             }
         });
 
@@ -327,6 +422,7 @@ public class List extends AppCompatActivity{
                 progressDialog.show();
                 firebaseAuth.signOut();
                 progressDialog.hide();
+                FirebaseMessaging.getInstance().unsubscribeFromTopic("notifications");
                 Intent intent = new Intent(getApplicationContext(), MainActivity.class);
                 startActivity(intent);
                 break;
@@ -358,7 +454,7 @@ public class List extends AppCompatActivity{
                 public void onSuccess(ListResult listResult) {
                     int flag = 0;
                     for (StorageReference item : listResult.getPrefixes()) {
-                        Toast.makeText(getApplicationContext(),"R "+storageRef.getName(),Toast.LENGTH_SHORT).show();
+                        //Toast.makeText(getApplicationContext(),"R "+storageRef.getName(),Toast.LENGTH_SHORT).show();
                         arrayList.add(new SubjectData(item.getName(), storageRef, "1"));
                         flag = 1;
                     }
@@ -369,10 +465,10 @@ public class List extends AppCompatActivity{
                         }
                     }
                     if (flag == 1) {
-                        Toast.makeText(getApplicationContext(),"Refreshing..."+storageRef.getName(),Toast.LENGTH_SHORT).show();
-                        customAdapter = new CustomAdapter(List.this, arrayList, children);
+                        customAdapter = new CustomAdapter(List.this, arrayList);
                         listView.setAdapter(customAdapter);
                     }
+                    p.setVisibility(View.GONE);
                 }
             }).addOnFailureListener(new OnFailureListener() {
                 @Override
@@ -382,65 +478,70 @@ public class List extends AppCompatActivity{
             });
         }
 
+    @SuppressLint("ObsoleteSdkInt")
     @Override
     public boolean onCreateOptionsMenu(Menu m) {
         getMenuInflater().inflate(R.menu.my_menu, m);
         if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
             SearchManager manager = (SearchManager) getSystemService(Context.SEARCH_SERVICE);
-            SearchView search = (SearchView) m.findItem(R.id.search).getActionView();
+            final SearchView search = (SearchView) m.findItem(R.id.search).getActionView();
             search.setQueryHint("Enter the keyword...");
-            search.setSearchableInfo(manager.getSearchableInfo(getComponentName()));
+            search.setSearchableInfo(Objects.requireNonNull(manager).getSearchableInfo(getComponentName()));
+            final Handler h=new Handler();
             search.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
                 @Override
-                public boolean onQueryTextChange(String query) {
-                    /*arrayList = new ArrayList<>();
-                    search(query.toLowerCase(),storageRef);*/
-                    return false;
+                public boolean onQueryTextChange(final String query) {
+                    h.removeCallbacksAndMessages(null);
+                    h.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            if(query.equals(""))
+                                refresh();
+                            else
+                            {
+                                p.setVisibility(View.VISIBLE);
+                                arrayList = new ArrayList<>();
+                                search(query.toLowerCase(),storageRef);
+                            }
+
+                        }
+                    },500);
+                    return true;
                 }
                 @Override
                 public boolean onQueryTextSubmit(String s) {
-                    arrayList = new ArrayList<>();
-                    progressDialog.setTitle("Searching...");
-                    progressDialog.show();
-                    search(s.toLowerCase(),storageRef);
-                    return false;
+                    return true;
                 }
             });
 
         }
-
         return true;
     }
     void search(final String key, final StorageReference sr)
     {
-
         sr.listAll().addOnSuccessListener(new OnSuccessListener<ListResult>() {
             @Override
             public void onSuccess(ListResult listResult) {
-                int flag = 0;
                 for (StorageReference item : listResult.getPrefixes()) {
-                    if(item.getName().toLowerCase().startsWith(key)) {
-                        arrayList.add(new SubjectData(item.getName(), storageRef, "1"));
-                        flag = 1;
+                    if (item.getName().toLowerCase().startsWith(key)) {
+                        arrayList.add(new SubjectData(item.getName(), sr, "1"));
                     }
-                    search(key,item);
+                    search(key, item);
                 }
                 for (StorageReference item : listResult.getItems()) {
-                    if (!item.getName().equals("makeitinvisible.png") && item.getName().startsWith(key)) {
-                        arrayList.add(new SubjectData(item.getName(), storageRef, ""));
-                        flag = 1;
+                    if (!item.getName().equals("makeitinvisible.png") && item.getName().toLowerCase().startsWith(key)) {
+                        arrayList.add(new SubjectData(item.getName(), sr, ""));
                     }
-
                 }
-                if (flag == 1 && sr.toString().equals(storageRef.toString())) {
-                    //arrayList.remove(new SubjectData("makeitinvisible.png",storageRef,""));
-                    Toast.makeText(getApplicationContext(),String.valueOf(arrayList.size()),Toast.LENGTH_SHORT).show();
-                    customAdapter = new CustomAdapter(List.this, arrayList, children);
-                    listView.setAdapter(customAdapter);
-                    progressDialog.hide();
-                }
+                if (arrayList.size() > 0)
+                    customAdapter = new CustomAdapter(List.this, arrayList);
+                listView.setAdapter(customAdapter);
+                p.setVisibility(View.GONE);
             }
         });
     }
-
+public void onPause()
+{
+    super.onPause();
+}
 }

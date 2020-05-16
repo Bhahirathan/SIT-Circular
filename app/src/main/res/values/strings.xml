@@ -16,4 +16,11 @@
     <string name="loading">Loading…</string>
 
     <string name="cloud_storage">Cloud Storage</string>
+    <string name="submit">Submit</string>
+    <string name="create_new_folder">Create New Folder</string>
+    <string name="e_mail">E-mail</string>
+    <string name="password">Password</string>
+    <string name="admin_login">Admin Login</string>
+    <string name="todo">TODO</string>
+    <string name="faculty_login">Faculty Login</string>
 </resources>

@@ -29,8 +29,7 @@ public class Admin extends AppCompatActivity {
 
     EditText mEmail;
     EditText mPassword;
-    Button mLoginBtn;
-
+    Button mLoginBtn,facbtn;
     private FirebaseAuth fAuth;
     private ProgressDialog ProgressDialog;
     private DatabaseReference databaseReference;
@@ -41,12 +40,20 @@ public class Admin extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate( savedInstanceState );
         setContentView( R.layout.activity_admin);
+        getSupportActionBar().hide();
         databaseReference=FirebaseDatabase.getInstance().getReference("Admins");
         fAuth = FirebaseAuth.getInstance();
         mEmail = findViewById(R.id.editText3);
         mPassword = findViewById(R.id.editText4);
         mLoginBtn =  (Button)findViewById( R.id.button2 );
         ProgressDialog=new ProgressDialog(this);
+        facbtn=findViewById(R.id.button3);
+        facbtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(new Intent(getApplicationContext(),MainActivity.class));
+            }
+        });
         mLoginBtn.setOnClickListener( new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -74,6 +81,7 @@ public class Admin extends AppCompatActivity {
                                     return;
                                 }
                                 ProgressDialog.setMessage("Logging In...");
+                                ProgressDialog.setCancelable(false);
                                 ProgressDialog.setCanceledOnTouchOutside(false);
                                 ProgressDialog.show();
                                 fAuth.signInWithEmailAndPassword( Email, Password ).addOnCompleteListener( new OnCompleteListener<AuthResult>() {
